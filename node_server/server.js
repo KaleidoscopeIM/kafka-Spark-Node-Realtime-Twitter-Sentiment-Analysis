@@ -5,21 +5,56 @@ const cron = require("node-cron");
 const helmet = require("helmet");
 var kafka = require('kafka-node');
 const dotenv = require('dotenv');
-const app = express();
 const http = require('http');
 var sockets = new Set();
 const host_server = process.env.HOST_SERVER;
 const appController = require('./controller.js');
 
-app.use(bodyparser.json());
-app.use(bodyparser.urlencoded({ extended: true }));
-app.use(helmet()); // securing rest apis
-app.use(cors());
-
-const httpServer = http.createServer(app);
+const app = express();
+const httpServer = http.Server(app);
 const socket_io_http = require("socket.io")(httpServer);
 
+// app.use(bodyparser.json());
+// app.use(bodyparser.urlencoded({ extended: true }));
+// app.use(helmet()); // securing rest apis
+// app.use(cors());
+
 dotenv.config();
+
+// var http = require('http').Server(app);
+// var io = require('socket.io')(http);
+// var kafka = require('kafka-node');
+// var port = 8085;
+
+// var Consumer = kafka.Consumer,
+//     client = new kafka.KafkaClient("localhost:9092"),
+//     consumer = new Consumer(
+//         client, [{ topic: 'processedtweets', partition: 0 }], { autoCommit: false });
+
+// app.get('/', function(req, res) {
+//     res.sendfile('index.html');
+// });
+
+// socket_io_http.on('connection', function(socket) {
+//     console.log('a user connected');
+//     socket.on('disconnect', function() {
+//         console.log('user disconnected');
+//     });
+// });
+
+// consumer = consumer.on('message', function(message) {
+//     // console.log(message.value);
+//     io.emit("message", message.value);
+// });
+
+// httpServer.listen(process.env.PORT, function() {
+//     console.log("Running on port " + process.env.PORT)
+// });
+
+
+
+
+
 
 socket_io_http.on('connection', function(socket) {
     sockets.add(socket);
@@ -53,7 +88,6 @@ consumer = consumer.on('message', function(message) {
 app.get("*", (req, res) => {
     // this is default response .. must be in the end of all get requests
     appController.getAll(req, res);
-
 });
 
 let serverInstance = httpServer.listen(process.env.PORT, () => { // run server

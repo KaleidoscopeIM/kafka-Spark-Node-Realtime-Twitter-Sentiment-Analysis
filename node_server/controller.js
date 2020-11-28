@@ -1,3 +1,3 @@
 exports.getAll = (req, res) => {
-    res.sendfile('./index.html');
+    res.sendFile(__dirname + '/index.html');
 }
