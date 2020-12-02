@@ -17,4 +17,5 @@ $ cd 'source code home'
 $ python start_app.py
 ```
 # Screens
+![Image of Yaktocat](https://octodex.github.com/images/yaktocat.png)
 [![N|Solid](https://github.com/KaleidoscopeIM/kafka-Spark-Node-Realtime-Twitter-Sentiment-Analysis/blob/main/screen1.png)](https://github.com/KaleidoscopeIM/kafka-Spark-Node-Realtime-Twitter-Sentiment-Analysis/blob/main/screen1.png)
