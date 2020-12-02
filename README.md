@@ -1,2 +1,19 @@
-# kafka-Spark-Node-Realtime-Twitter-Sentiment-Analysis
-The project aims to design an app to fetch Twitter live data using Kafka broker and Spark streams and then perform in place sentiment analysis. The project starts a node server, in the end, to display the final analyzed data onto a locally hosted web app.
+
+# Developers 
+- ##### Gautam Saini (https://github.com/KaleidoscopeIM)
+- ##### Shilpi Sirohi (https://github.com/shilpisirohi12)
+# Installation
+- Install zookeeper server - apache-zookeeper-3.6.2-bin
+- kafka - kafka_2.12-2.6.0 
+- hadoop - hadoop-3.2.1
+- python 3.7.0
+- node npm
+- Install python packages from ./kafka_spark_stream/requirements.txt
+- Install node modules from ./node_server (run command : 'npm install' )
+
+# Run application
+```sh
+$ cd 'source code home' 
+$ python start_app.py
+```
+# Screens
