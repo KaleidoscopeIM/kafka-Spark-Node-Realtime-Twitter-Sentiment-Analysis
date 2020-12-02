@@ -17,3 +17,4 @@ $ cd 'source code home'
 $ python start_app.py
 ```
 # Screens
+[![N|Solid](https://github.com/KaleidoscopeIM/kafka-Spark-Node-Realtime-Twitter-Sentiment-Analysis/blob/main/screen1.png)](https://github.com/KaleidoscopeIM/kafka-Spark-Node-Realtime-Twitter-Sentiment-Analysis/blob/main/screen1.png)
