@@ -79,10 +79,20 @@ let Consumer = kafka.Consumer,
     consumer = new Consumer(
         client, [{ topic: 'processedtweets', partition: 0 }], { autoCommit: false });
 
+let Consumer1 = kafka.Consumer,
+    client1 = new kafka.KafkaClient(process.env.HOST_SERVER + ":" + process.env.PORT),
+    Consumer_sentiments = new Consumer1(
+        client1, [{ topic: 'processSentiments', partition: 0 }], { autoCommit: false });
+
 
 consumer = consumer.on('message', function(message) {
     console.log(message);
     socket_io_http.emit("message", message.value);
+});
+
+Consumer_sentiments = Consumer_sentiments.on('message', function(message) {
+    console.log(message);
+    socket_io_http.emit("sentimet", message.value);
 });
 
 app.get("*", (req, res) => {

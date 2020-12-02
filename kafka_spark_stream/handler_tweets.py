@@ -1,20 +1,23 @@
+from os import environ
+from kafka import KafkaProducer
+from configparser import ConfigParser
 from pyspark import SparkContext, SparkConf
 from pyspark.streaming import StreamingContext
 from pyspark.streaming.kafka import KafkaUtils
 from pyspark.sql import Row, SQLContext
 import json
 import sys
-from os import environ
-from kafka import KafkaProducer
-from configparser import ConfigParser
-
+from textblob import TextBlob
 
 def set_global_topic_name(config):
-    # Set topic name as global variable
     globals()['dashboard_topic_name'] = config['Resources']['dashboard_topic_name']
+    globals()['sentiment_topic_name'] = config['Resources']['sentiment_topic_name']
+
 
 
 def sum_all_tags(new_values, last_sum):
+    print("new_valie"+str(new_values))
+    print("last_sum"+str(last_sum))
     if last_sum is None:
         return sum(new_values)
     return sum(new_values) + last_sum
@@ -53,31 +56,62 @@ def process_hashtags(time, rdd):
         # Select top 10 hashtags according to frequency
         hashtagCountsDataFrame = spark_sql.sql(
             "select hashtag, frequency from hashtags order by frequency desc limit 10")
-        # hashtagCountsDataFrame.show()
+        hashtagCountsDataFrame.show()
 
         # Send top 10 hashtags to kafka topic so that
         # it is picked up by server side script
-        send_to_kafka(hashtagCountsDataFrame)
+        send_to_kafka(hashtagCountsDataFrame,'dashboard_topic_name')
 
     except:
         e = sys.exc_info()[0]
         print(e)
 
 
-def send_to_kafka(hashtagCountsDataFrame):
+def process_sentiment(time, rdd):
+    # print("---------{}--------".format(time))
+    try:
+        # Get the Spark SQL context
+        spark_sql = getSparkSessionInstance(rdd.context)
 
-    top_hashtags = {}
+        # Convert RDD[String] to RDD[Row] to DataFrame
+        rowRdd = rdd.map(lambda tag: Row(tags=tag[0], frequency=tag[1]))
+
+        # Create Dataset
+        hashtagsDataFrame = spark_sql.createDataFrame(rowRdd)
+
+        # Creates a temporary view using the DataFrame
+        hashtagsDataFrame.createOrReplaceTempView("sentiments_table")
+
+        # Select top 10 hashtags according to frequency
+        hashtagCountsDataFrame = spark_sql.sql(
+            "select tags, frequency from sentiments_table order by frequency")
+        hashtagCountsDataFrame.show()
+        #hashtagCountsDataFrame
+        # Send top 10 hashtags to kafka topic so that
+        # it is picked up by server side script
+        send_to_kafka(hashtagCountsDataFrame,'sentiment_topic_name')
+
+    except:
+        e = sys.exc_info()[0]
+        print(e)
+        
+
+def send_to_kafka(hashtagCountsDataFrame, topic):
+
+    data = {}
 
     # Extract top 10 hashtags from RDD
-    for hashtag, frequency in hashtagCountsDataFrame.collect():
-        top_hashtags[hashtag] = frequency
+    for tags, frequency in hashtagCountsDataFrame.collect():
+        data[tags] = frequency
 
     # print("Trending HashTags = ", top_hashtags)
 
     producer = getKafkaInstance()
 
     # Send hashtags to kafka topic
-    producer.send(globals()['dashboard_topic_name'], value=top_hashtags)
+    producer.send(globals()[topic], value=data)
+
+
 
 
 if __name__ == "__main__":
@@ -106,15 +140,25 @@ if __name__ == "__main__":
     # Create spark context from above configuration
     sc = SparkContext(conf=sparkConf)
 
+
     # Set log level to error
     sc.setLogLevel("ERROR")
+    
+    # Create sqlContext
+    sqlContxt = SQLContext(sc)
+    
+    # file_path = 'file:///raw-tweets/'
+    # rawDF = readData(file_path,sqlContxt)
+    # rawDF.show(n=7, truncate=99)
 
     # Create Streaming context
-    # Get data from stream every 60 secs
-    ssc = StreamingContext(sc, 60)
+    # Get data from stream every 30 secs
+    ssc = StreamingContext(sc, 30)
 
     # Setup checkpoint for RDD recovery
     ssc.checkpoint("checkpointTwitterApp")
+    
+
 
     # Reading parameters from conf file
     bootstap_server = config['Kafka_param']['bootstrap.servers']
@@ -135,14 +179,21 @@ if __name__ == "__main__":
         ssc, [config['Resources']['app_topic_name']], kafkaParams=kafkaParam, valueDecoder=lambda x: json.loads(x.decode('utf-8')))
 
     # Print count of tweets in a particular batch
-    # tweets.count().pprint()
+    # tweets.pprint()
+    tweetStream = tweets.map(lambda v: v[1]["text"])
+    tweetSentiment = tweetStream.map(lambda t: TextBlob(t).sentiment.polarity)
+    setVar= tweetSentiment.map(lambda x: 'positive' if x>0.5 else ('neutral' if x==0.5 else 'negative'))
+    sentmentCount=setVar.countByValue()
+    sentmentCount.pprint()
+    sentmentCount.foreachRDD(process_sentiment)
 
     # Split tweets into words
     words = tweets.map(lambda v: v[1]["text"]).flatMap(lambda t: t.split(" "))
+    words.count().pprint()
 
     # Get hashtags from tweet and create a new DStream by adding their count to previos DStream count
-    hashtags = words.filter(lambda tag: len(
-        tag) > 2 and '#' == tag[0]).countByValue().updateStateByKey(sum_all_tags)
+    hashtags = words.filter(lambda tag: len(tag)>2 and '#' == tag[0]).countByValue().updateStateByKey(sum_all_tags)
+    hashtags.pprint()
 
     # Process each DStream
     hashtags.foreachRDD(process_hashtags)

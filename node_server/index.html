@@ -1,97 +1,189 @@
-<div id='container' style="height:100%;width:100%;"></div>
-<script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
-<script src="http://code.highcharts.com/highcharts.js"></script>
-<script src="http://code.highcharts.com/modules/exporting.js"></script>
-<script src="/socket.io/socket.io.js"></script>
-<script type="text/javascript">
-    $(document).ready(function() {
-        var socket = io();
-        var hashtags = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"];
-        var counts = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-        Highcharts.setOptions({
-            global: {
-                useUTC: false
-            }
-        });
+<!DOCTYPE html>
+<html lang="en">
 
-        chart = new Highcharts.Chart({
-            chart: {
-                renderTo: 'container',
-                type: 'bar'
-            },
-            title: {
-                text: 'Tweet Analysis'
-            },
-            subtitle: {
-                text: 'Top 10 hashtags'
-            },
-            xAxis: {
-                categories: hashtags,
-                title: {
-                    text: null
-                }
-            },
-            yAxis: {
-                min: 0,
-                title: {
-                    text: 'Hashtag count',
-                    align: 'high'
-                },
-                labels: {
-                    overflow: 'justify'
-                }
-            },
-            tooltip: {
-                valueSuffix: ' Numbers'
-            },
-            plotOptions: {
-                bar: {
-                    dataLabels: {
-                        enabled: true
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.1/css/bootstrap.min.css" integrity="sha384-WskhaSGFgHYWDcbwN70/dfYBj47jz9qbsMId/iRN3ewGhXQFZCSftd1LZCfmhktB" crossorigin="anonymous">
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js" integrity="sha384-ZMP7rVo3mIykV+2+9J3UJ46jBk0WLaUAdn689aCwoqbBJiSnjAK/l8WvCWPIPm49" crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.1/js/bootstrap.min.js" integrity="sha384-smHYKdLADwkXOn1EmN1qk/HfnUcbVRZyYmZ4qpPea6sjB/pTJ0euyQp0Mk8ck+5T" crossorigin="anonymous"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.3/Chart.bundle.min.js"></script>
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body {
+            font-family: "Poppins", sans-serif;
+            background: #f0ebeb;
+        }
+        
+        div #chart1,
+        #chart2 {
+            margin-left: 1rem;
+            margin-right: 1rem;
+        }
+        
+        div.row {
+            margin-top: 1rem;
+            padding-top: 5rem;
+        }
+        
+        div .header {
+            margin: auto;
+            width: 60%;
+            border: 3px solid green;
+            padding: 5px;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="body" class="container-fluid">
+        <div class="row header">
+            <h3 style="color: blue;font-weight: bold; margin: auto;">Dashboard based on Twitter Feed</h3>
+        </div>
+        <div class="row header">
+            <div class="col">
+                <div id="chart1">Chart 1.. Waiting for real Data</div>
+            </div>
+            <div class="col">
+                <div id="chart2">Chart 2.. Waiting for real Data</div>
+            </div>
+            <div class="col">
+                <div id="count">Total Data Updates happened: 0</div>
+            </div>
+        </div>
+        <div class="row">
+            <h3 style="margin: auto;">Update happens in every 30 seconds</h3>
+        </div>
+
+        <div class="row">
+            <div class="col">
+                <canvas id="showSentiment"></canvas>
+            </div>
+            <div class="col">
+                <canvas id="countTags"></canvas>
+            </div>
+        </div>
+        <div class="row">
+            <h4 style="margin:auto">Created By: Gautam Saini, Shilpi Sirohi</h4>
+        </div>
+
+        <script type="text/javascript">
+            $(document).ready(function() {
+                var socket = io();
+                var count = 0;
+
+                // ***************************************************
+                //code for Hashtags charts
+                // ***************************************************
+                var hashtags = ["tag1", "tag2", "tag3", "tag4", "tag5"];
+                var counts = [5, 5, 5, 5, 5];
+                var ctx = document.getElementById('countTags').getContext('2d');
+                var myChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: hashtags,
+                        datasets: [{
+                            label: 'Hashtags Frequency',
+                            data: counts,
+                            barPercentage: 1,
+                            barThickness: 40,
+                            borderWidth: 2,
+                            borderColor: "rgba(255,99,132,1)",
+                            backgroundColor: "rgba(255,99,132,0.2)"
+                        }]
+                    },
+                    options: {
+                        legend: {
+                            display: false
+                        },
+                        title: {
+                            display: true,
+                            text: 'Twitter Hashtags Frequency Live Feed'
+                        },
+                        scales: {
+                            yAxes: [{
+                                ticks: {
+                                    beginAtZero: true
+                                }
+                            }]
+                        }
                     }
-                },
-                series: {
-                    stacking: 'normal'
-                }
-            },
-            legend: {
-                layout: 'vertical',
-                align: 'right',
-                verticalAlign: 'top',
-                x: -40,
-                y: 100,
-                floating: true,
-                borderWidth: 1,
+                });
 
-                backgroundColor: (
-                    (Highcharts.theme && Highcharts.theme.legendBackgroundColor) ||
-                    '#FFFFFF'),
-                shadow: true
-            },
-            credits: {
-                enabled: false
-            },
-            series: [{
-                name: 'Count',
-                data: counts
-            }]
-        });
+                // ***************************************************
+                //code for Hashtags charts
+                // ***************************************************
+                var sentiments = ["positive", "negative", "neutral"];
+                var sent_cnt = [1, 1, 1];
+                var ctx1 = document.getElementById('showSentiment').getContext('2d');
+                var myChart1 = new Chart(ctx1, {
+                    type: 'line',
+                    data: {
+                        labels: sentiments,
+                        datasets: [{
+                            label: 'Sentiment Analysis',
+                            data: sent_cnt,
+                            fill: false,
+                            lineTension: 0.8,
+                            backgroundColor: "rgba(255,99,132,1)",
+                            pointBorderWidth: 8,
+                            pointHoverRadius: 12
+                        }]
+                    },
+                    options: {
+                        legend: {
+                            display: false
+                        },
+                        title: {
+                            display: true,
+                            text: 'Twitter Sentiment Analysis Live Feed'
+                        },
+                        scales: {
+                            yAxes: [{
+                                ticks: {
+                                    beginAtZero: true
+                                }
+                            }]
+                        }
+                    }
+                });
 
-        socket.on('message', function(message) {
-            var data = JSON.parse(message);
-            hashtags.length = 0;
-            counts.length = 0;
-            for (hashtag in data) {
-                hashtags.push(hashtag);
-                counts.push(data[hashtag]);
-                console.log(chart.series);
-                console.log(chart.series.data);
-                console.log(chart.series[0].data);
-                chart.series[0].update({
-                    data: counts
-                })
-                chart.redraw();
-            }
-        });
-    });
-</script>
+
+                // Fetching data from socket
+                socket.on('message', function(message) {
+                    var data = JSON.parse(message);
+                    hashtags.length = 0;
+                    counts.length = 0;
+                    for (hashtag in data) {
+                        hashtags.push(hashtag);
+                        counts.push(data[hashtag]);
+                        console.log("Chart updated")
+                    }
+
+                    myChart.update();
+                    document.getElementById("chart1").innerHTML = "Chart 1 Updated.. Just Now!!!";
+
+                });
+                socket.on('sentimet', function(message) {
+                    console.log(message);
+                    var data = JSON.parse(message);
+                    sentiments.length = 0;
+                    sent_cnt.length = 0;
+                    for (tag in data) {
+                        sentiments.push(tag);
+                        sent_cnt.push(data[tag]);
+                        console.log("Chart1 updated")
+                    }
+                    count = count + 1;
+                    myChart1.update();
+                    document.getElementById("chart2").innerHTML = "Chart 2 Updated.. Just Now!!!";
+                    document.getElementById("count").innerHTML = "Total Updates happened: " + count;
+                });
+            });
+        </script>
+</body>
+
+</html>
