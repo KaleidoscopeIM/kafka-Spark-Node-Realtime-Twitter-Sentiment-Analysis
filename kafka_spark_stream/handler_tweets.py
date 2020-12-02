@@ -9,22 +9,13 @@ import json
 import sys
 from textblob import TextBlob
 
-def set_global_topic_name(config):
-    globals()['dashboard_topic_name'] = config['Resources']['dashboard_topic_name']
-    globals()['sentiment_topic_name'] = config['Resources']['sentiment_topic_name']
 
-
-
-def sum_all_tags(new_values, last_sum):
-    print("new_valie"+str(new_values))
-    print("last_sum"+str(last_sum))
-    if last_sum is None:
-        return sum(new_values)
-    return sum(new_values) + last_sum
-
+def sum_all_tags(new_counts, total_saved):
+    if total_saved is None:
+        return sum(new_counts)
+    return sum(new_counts) + total_saved
 
 def getSparkSessionInstance(spark_context):
-    # Creating the gloabal instance of SQL context only once
     if ('sparkSessionSingletonInstance' not in globals()):
         globals()['sparkSessionSingletonInstance'] = SQLContext(spark_context)
     return globals()['sparkSessionSingletonInstance']
@@ -37,166 +28,99 @@ def getKafkaInstance():
                                                             value_serializer=lambda v: json.dumps(v).encode('utf-8'))
     return globals()['kafkaSingletonInstance']
 
+def send_to_kafka(hashtagCountsDataFrame, topic):
 
+    data = {}
+    for tags, frequency in hashtagCountsDataFrame.collect():
+        data[tags] = frequency
+    # producer will produce analysed tweets
+    producer = getKafkaInstance()
+    # send analysis to kafka topic
+    producer.send(globals()[topic], value=data)
+    
 def process_hashtags(time, rdd):
-    # print("---------{}--------".format(time))
     try:
-        # Get the Spark SQL context
-        spark_sql = getSparkSessionInstance(rdd.context)
-
-        # Convert RDD[String] to RDD[Row] to DataFrame
-        rowRdd = rdd.map(lambda tag: Row(hashtag=tag[0], frequency=tag[1]))
-
-        # Create Dataset
-        hashtagsDataFrame = spark_sql.createDataFrame(rowRdd)
-
-        # Creates a temporary view using the DataFrame
-        hashtagsDataFrame.createOrReplaceTempView("hashtags")
-
-        # Select top 10 hashtags according to frequency
-        hashtagCountsDataFrame = spark_sql.sql(
-            "select hashtag, frequency from hashtags order by frequency desc limit 10")
-        hashtagCountsDataFrame.show()
-
-        # Send top 10 hashtags to kafka topic so that
-        # it is picked up by server side script
-        send_to_kafka(hashtagCountsDataFrame,'dashboard_topic_name')
-
+        print("---------Processing tags data--------".format(time))
+        sql_instance = getSparkSessionInstance(rdd.context)
+        rowRdd = rdd.map(lambda tag: Row(hashtagwords=tag[0], frequency=tag[1]))
+        # create a local table for storing streaming data
+        sql_instance.createDataFrame(rowRdd).createOrReplaceTempView("wordstable")
+        
+        # fetch top 5 words hashtags
+        df = sql_instance.sql(
+            "select hashtagwords, frequency from wordstable order by frequency desc limit 5")
+        df.show()
+        
+        send_to_kafka(df,'tweet_topic_name')
     except:
         e = sys.exc_info()[0]
         print(e)
 
 
 def process_sentiment(time, rdd):
-    # print("---------{}--------".format(time))
     try:
-        # Get the Spark SQL context
-        spark_sql = getSparkSessionInstance(rdd.context)
-
-        # Convert RDD[String] to RDD[Row] to DataFrame
-        rowRdd = rdd.map(lambda tag: Row(tags=tag[0], frequency=tag[1]))
-
-        # Create Dataset
-        hashtagsDataFrame = spark_sql.createDataFrame(rowRdd)
-
-        # Creates a temporary view using the DataFrame
-        hashtagsDataFrame.createOrReplaceTempView("sentiments_table")
-
-        # Select top 10 hashtags according to frequency
-        hashtagCountsDataFrame = spark_sql.sql(
-            "select tags, frequency from sentiments_table order by frequency")
-        hashtagCountsDataFrame.show()
-        #hashtagCountsDataFrame
-        # Send top 10 hashtags to kafka topic so that
-        # it is picked up by server side script
-        send_to_kafka(hashtagCountsDataFrame,'sentiment_topic_name')
-
+        print("---------Processing sentiment data--------".format(time))
+        sql_instance = getSparkSessionInstance(rdd.context)
+        rowRdd = rdd.map(lambda tag: Row(tweet=tag[0], frequency=tag[1]))
+        sql_instance.createDataFrame(rowRdd).createOrReplaceTempView("sentiments_table")
+        #fetch all tweets for sentiment analysis
+        df = sql_instance.sql(
+            "select tweet, frequency from sentiments_table order by frequency")
+        df.show()
+        send_to_kafka(df,'sentiment_topic_name')
     except:
         e = sys.exc_info()[0]
         print(e)
-        
-
-def send_to_kafka(hashtagCountsDataFrame, topic):
-
-    data = {}
-
-    # Extract top 10 hashtags from RDD
-    for tags, frequency in hashtagCountsDataFrame.collect():
-        data[tags] = frequency
-
-    # print("Trending HashTags = ", top_hashtags)
-
-    producer = getKafkaInstance()
-
-    # Send hashtags to kafka topic
-    producer.send(globals()[topic], value=data)
-
-
-
+    
 
 if __name__ == "__main__":
 
     config = ConfigParser()
 
-    #Read conf file
+    #setup confifuration for the app
     config.read(".\configuration.conf")
+    globals()['tweet_topic_name'] = config['App_Data']['tweet_topic_name']
+    globals()['sentiment_topic_name'] = config['App_Data']['sentiment_topic_name']
+    environ['PYSPARK_SUBMIT_ARGS'] = config['App_Data']['pyspark_environ']
+    sparkConf = SparkConf(config['Spark_data']['config_name'])
 
-    # Set topic name
-    set_global_topic_name(config)
-
-    # Read pyspark submit path from conf file
-    pyspark_environ = config['Resources']['pyspark_environ']
-
-    # import kafka libraries to run code from terminal
-    environ['PYSPARK_SUBMIT_ARGS'] = pyspark_environ
-
-    # Setup spark conf
-    sparkConf = SparkConf("TwitterDataAnalysis")
-
-    # Number of receivers = 2
-    # One for kafka and other for rdd processing
+    # setting number of receivers = 2
+    # 1 = kafka, 2= rdd processing
     sparkConf.setMaster("local[2]")
-
-    # Create spark context from above configuration
     sc = SparkContext(conf=sparkConf)
-
-
-    # Set log level to error
     sc.setLogLevel("ERROR")
-    
-    # Create sqlContext
     sqlContxt = SQLContext(sc)
-    
-    # file_path = 'file:///raw-tweets/'
-    # rawDF = readData(file_path,sqlContxt)
-    # rawDF.show(n=7, truncate=99)
-
-    # Create Streaming context
-    # Get data from stream every 30 secs
     ssc = StreamingContext(sc, 30)
 
-    # Setup checkpoint for RDD recovery
-    ssc.checkpoint("checkpointTwitterApp")
+    # Setup temp folder rdd data storage and recovery by checkpint
+    ssc.checkpoint("temp")
     
-
-
-    # Reading parameters from conf file
-    bootstap_server = config['Kafka_param']['bootstrap.servers']
-    zookeeper = config['Kafka_param']['zookeeper.connect']
-    group_id = config['Kafka_param']['group.id']
-    timeout = config['Kafka_param']['zookeeper.connection.timeout.ms']
-
-    # Parameters for connecting to kafka
+    # setup kafka
     kafkaParam = {
-        "zookeeper.connect": zookeeper,
-        "group.id": group_id,
-        "zookeeper.connection.timeout.ms": timeout,
-        "bootstrap.servers": bootstap_server
+        "zookeeper.connect": config['Kafka_Data']['zookeeper.connect'],
+        "group.id": config['Kafka_Data']['group.id'],
+        "zookeeper.connection.timeout.ms": str(15000),
+        "bootstrap.servers": config['Kafka_Data']['bootstrap.servers']
     }
 
-    # Creating Dstream by taking input from Kafka
+    # Creating Dstream from Kafka input
     tweets = KafkaUtils.createDirectStream(
-        ssc, [config['Resources']['app_topic_name']], kafkaParams=kafkaParam, valueDecoder=lambda x: json.loads(x.decode('utf-8')))
-
-    # Print count of tweets in a particular batch
-    # tweets.pprint()
-    tweetStream = tweets.map(lambda v: v[1]["text"])
-    tweetSentiment = tweetStream.map(lambda t: TextBlob(t).sentiment.polarity)
+        ssc, [config['App_Data']['app_name']], kafkaParams=kafkaParam, valueDecoder=lambda x: json.loads(x.decode('utf-8')))
+    
+    # Get tweet sterem to perform sentiment analysis - Shilpi
+    tweet_stream = tweets.map(lambda tweet_data: tweet_data[1]["text"])
+    tweetSentiment = tweet_stream.map(lambda t: TextBlob(t).sentiment.polarity)
     setVar= tweetSentiment.map(lambda x: 'positive' if x>0.5 else ('neutral' if x==0.5 else 'negative'))
     sentmentCount=setVar.countByValue()
     sentmentCount.pprint()
     sentmentCount.foreachRDD(process_sentiment)
 
-    # Split tweets into words
-    words = tweets.map(lambda v: v[1]["text"]).flatMap(lambda t: t.split(" "))
-    words.count().pprint()
-
-    # Get hashtags from tweet and create a new DStream by adding their count to previos DStream count
-    hashtags = words.filter(lambda tag: len(tag)>2 and '#' == tag[0]).countByValue().updateStateByKey(sum_all_tags)
-    hashtags.pprint()
-
-    # Process each DStream
-    hashtags.foreachRDD(process_hashtags)
+    # create another strem for tag analysis
+    words_list = tweets.map(lambda v: v[1]["text"]).flatMap(lambda t: t.split(" "))
+    words_list.count().pprint()
+    hashtag_data = words_list.filter(lambda tag: len(tag)>2 and '#' == tag[0]).countByValue().updateStateByKey(sum_all_tags)
+    hashtag_data.pprint()
+    hashtag_data.foreachRDD(process_hashtags)
 
     # Start Streaming Context
     ssc.start()

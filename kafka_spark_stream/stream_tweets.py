@@ -4,33 +4,28 @@ import sys
 from kafka import KafkaProducer
 from configparser import ConfigParser
 
-
 class Listener(tweepy.StreamListener):
-
-    def __init__(self, kafka_producer, topic_name):
-        self.producer = kafka_producer
-        self.topic_name = topic_name
+    processed_tweet_count = 0
+    producer = None
+    app_name = None
+    
+    def __init__(self, kafka_producer):
+        self.app_name = config['App_Data']['app_name']
+        self.producer = kafka_producer        
         self.count = 0
 
-    def on_data(self, raw_data):
-        self.process_data(raw_data)
-
-    def process_data(self, raw_data):
-        data = json.loads(raw_data)
-        text = data["text"]
-        if "extended_tweet" in data:
-            text = data["extended_tweet"]["full_text"]
-        if '#' in text:
-            self.producer.send(self.topic_name, value={"text": text})
-            self.count += 1
-            if self.count % 100 == 0:
-                print("Number of tweets sent = ", self.count)
+    def on_data(self, json_data):
+        data = json.loads(json_data)
+        if '#' in data["text"]:       
+            self.producer.send(self.app_name, value={"text": data["text"]})
+            print(data["text"])
+            self.processed_tweet_count += 1    
+            print("-------------------------------------- ", end="Tweets processed = " +str(self.processed_tweet_count) +"\n")     
+                 
 
     def on_error(self, status_code):
-        if status_code == 420:
-            # returning False in on_error disconnects the stream
-            print("**********Error: status_code = 420")
-            return False
+        print("Error in streaming data")
+        print(status_code)
 
 
 class StreamTweets():
@@ -38,42 +33,32 @@ class StreamTweets():
     def __init__(self, auth, listener):
         self.stream = tweepy.Stream(auth, listener)
 
-    def start(self, location, language, track_keywords):
-        self.stream.filter(languages=language,
-                           track=track_keywords, locations=location)
-
+    def start(self):
+        language = config['Tweet_Params']['language'].split(' ')
+        track_keywords = config['Tweet_Params']['keywords'].split(' ')
+        location = [float(aLoc) for aLoc in config['Tweet_Params']['location'].split(',')]  
+        self.stream.filter(languages=language,track=track_keywords, locations=location)
 
 if __name__ == "__main__":
 
     config = ConfigParser()
     config.read(".\configuration.conf")
 
-    bootstap_server = config['Kafka_param']['bootstrap.servers']
-
-    # bootstrap_servers=[‘localhost:9092’] : sets the host and port the producer
-    # should contact to bootstrap initial cluster metadata. It is not necessary to set this here,
-    # since the default is localhost:9092.
-    #
-    # value_serializer=lambda x: dumps(x).encode(‘utf-8’): function of how the data
-    # should be serialized before sending to the broker. Here, we convert the data to
-    # a json file and encode it to utf-8.
+    bootstap_server = config['Kafka_Data']['bootstrap.servers']
     producer = KafkaProducer(bootstrap_servers=[bootstap_server],
                              value_serializer=lambda v: json.dumps(v).encode('utf-8'))
 
-    listener = Listener(producer, config['Resources']['app_topic_name'])
-
+    
+    # using tweepy to conenct to twitter .. standard api of tweepy
     consumer_key = config['API_details']['consumer_key']
     consumer_secret = config['API_details']['consumer_secret']
     access_token = config['API_details']['access_token']
-    access_secret = config['API_details']['access_secret']
-
+    access_secret = config['API_details']['access_secret']    
     auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
     auth.set_access_token(access_token, access_secret)
-
+    
+    listener = Listener(producer)
     stream = StreamTweets(auth, listener)
 
-    # Converting string to float to get cordinates
-    location = [float(x) for x in config['API_param']['location'].split(',')]
-    language = config['API_param']['language'].split(' ')
-    track_keywords = config['API_param']['track_keywords'].split(' ')
-    stream.start(location, language, track_keywords)
+    # Converting string to float to get cordinates  
+    stream.start()
